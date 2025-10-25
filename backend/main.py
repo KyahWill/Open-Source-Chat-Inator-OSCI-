@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import re
 import urllib.request
 import urllib.error
@@ -11,6 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
+CORS(app)
 
 # GitHub token from environment variable
 GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
@@ -231,6 +233,49 @@ def validate_github():
         'message': 'Valid GitHub URL',
         'valid': True,
         'url': url
+    }), 200
+
+@app.route('/gather-files', methods=['POST'])
+def gather_files():
+    """POST endpoint to gather files from a GitHub repository"""
+    data = request.get_json()
+    
+    if not data or 'url' not in data:
+        return jsonify({
+            'error': 'Missing URL in request body'
+        }), 400
+    
+    url = data['url']
+    token = data.get('token')  # Optional token
+    
+    # Validate URL format
+    if not validate_github_url(url):
+        return jsonify({
+            'error': 'Invalid GitHub URL format',
+            'url': url
+        }), 400
+    
+    # Fetch source code
+    result = get_source_code(url, token)
+    
+    # Check if there was an error
+    if 'error' in result and 'files' not in result:
+        return jsonify(result), 404
+    
+    # Transform files dict into array format for frontend
+    files_array = [
+        {
+            'path': path,
+            'content': content,
+            'size': len(content.encode('utf-8')) if isinstance(content, str) else 0
+        }
+        for path, content in result.get('files', {}).items()
+    ]
+    
+    return jsonify({
+        'repository': result.get('repository'),
+        'files': files_array,
+        'total_files': result.get('total_files', len(files_array))
     }), 200
 
 if __name__ == "__main__":
