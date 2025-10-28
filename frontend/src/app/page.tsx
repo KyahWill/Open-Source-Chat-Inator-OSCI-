@@ -40,7 +40,7 @@ export default function Home() {
     setIsValidating(true);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BACKEND_URL}/validate-github-url`, {
+      const response = await fetch('https://cloud-run-hackathon-backend-816885386955.asia-southeast1.run.app/validate-github-url', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -57,7 +57,7 @@ export default function Home() {
 
       setValidationSuccess(true);
     } catch (err) {
-      setValidationError('Failed to connect to backend. Make sure it\'s running on port 5000.');
+      setValidationError('Failed to connect to backend service. Please check your connection.');
     } finally {
       setIsValidating(false);
     }
@@ -69,7 +69,7 @@ export default function Home() {
     setIsGathering(true);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BACKEND_URL}/gather-files`, {
+      const response = await fetch('https://cloud-run-hackathon-backend-816885386955.asia-southeast1.run.app/gather-files', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

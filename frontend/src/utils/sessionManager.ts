@@ -3,7 +3,7 @@
  * Handles session creation and management with the backend agent service
  */
 
-const BACKEND_URL = 'http://localhost:5000';
+const BACKEND_URL = 'https://cloud-run-hackathon-backend-816885386955.asia-southeast1.run.app';
 
 interface SessionInfo {
   session_id: string;
@@ -19,7 +19,7 @@ export async function checkSessionExists(
   userId: string = 'default_user'
 ): Promise<boolean> {
   const sessionId = generateSessionId(repository);
-  
+
   try {
     // Try to get the session from the agent service via backend
     const response = await fetch(`${BACKEND_URL}/check-session`, {
@@ -48,7 +48,7 @@ export async function createSession(
   userId: string = 'default_user'
 ): Promise<SessionInfo | null> {
   const sessionId = generateSessionId(repository);
-  
+
   try {
     const response = await fetch(`${BACKEND_URL}/create-session`, {
       method: 'POST',
@@ -87,7 +87,7 @@ export async function ensureSession(
 ): Promise<SessionInfo | null> {
   // Check if session already exists
   const exists = await checkSessionExists(repository, userId);
-  
+
   if (exists) {
     console.log('Session already exists for repository:', repository);
     return {
@@ -110,7 +110,7 @@ function generateSessionId(repository: string): string {
   const repoName = repository
     .replace(/^https?:\/\/(www\.)?github\.com\//, '')
     .replace(/\/$/, '');
-  
+
   // Convert to session ID format
   return `session_${repoName.replace(/\//g, '_')}`;
 }

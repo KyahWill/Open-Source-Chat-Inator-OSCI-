@@ -114,7 +114,7 @@ export default function ChatInterface({ repositoryUrl, files, onClose }: ChatInt
     try {
       const repoName = repositoryUrl.replace(/^https?:\/\/(www\.)?github\.com\//, '');
       
-      const response = await fetch('http://localhost:5000/chat', {
+      const response = await fetch('https://cloud-run-hackathon-backend-816885386955.asia-southeast1.run.app/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -142,7 +142,7 @@ export default function ChatInterface({ repositoryUrl, files, onClose }: ChatInt
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Sorry, I\'m having trouble connecting to the backend service. Please make sure it\'s running on port 5000.',
+        content: 'Sorry, I\'m having trouble connecting to the backend service. Please check your connection and try again.',
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
