@@ -247,5 +247,45 @@ def gather_files():
         'total_files': result.get('total_files', len(files_array))
     }), 200
 
+@app.route('/chat', methods=['POST'])
+def chat():
+    """POST endpoint to chat with the codebase using the agent"""
+    data = request.get_json()
+    
+    if not data or 'message' not in data:
+        return jsonify({
+            'error': 'Missing message in request body'
+        }), 400
+    
+    message = data['message']
+    repository = data.get('repository', '')
+    files = data.get('files', [])
+    
+    # TODO: Integrate with your agent service
+    # For now, return a placeholder response
+    # You'll need to call your agent API at http://localhost:8080
+    
+    try:
+        # Example: Forward to agent service
+        # agent_response = requests.post(
+        #     'http://localhost:8080/api/agent/chat',
+        #     json={'message': message, 'context': {'repository': repository, 'files': files}}
+        # )
+        # return jsonify({'response': agent_response.json()['response']}), 200
+        
+        # Placeholder response
+        response_text = f"I received your question: '{message}'. I'm analyzing the codebase from {repository} with {len(files)} files. This is a placeholder response - integrate with your agent service for actual AI responses."
+        
+        return jsonify({
+            'response': response_text,
+            'repository': repository,
+            'files_count': len(files)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Error processing chat request: {str(e)}'
+        }), 500
+
 if __name__ == "__main__":
     app.run(debug=True, host='0.0.0.0', port=5000)

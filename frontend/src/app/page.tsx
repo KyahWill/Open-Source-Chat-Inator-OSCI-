@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import TextEditor from '@/components/TextEditor';
+import ChatInterface from '@/components/ChatInterface';
 
 export default function Home() {
   const [githubUrl, setGithubUrl] = useState('');
@@ -12,6 +13,7 @@ export default function Home() {
   const [files, setFiles] = useState<any[]>([]);
   const [error, setError] = useState('');
   const [selectedFile, setSelectedFile] = useState<any | null>(null);
+  const [showChat, setShowChat] = useState(false);
 
   const validateGithubUrl = (url: string): boolean => {
     const githubPattern = /^https?:\/\/(www\.)?github\.com\/[\w-]+\/[\w.-]+\/?$/;
@@ -161,6 +163,16 @@ export default function Home() {
                 {isGathering ? 'Gathering Files...' : 'Gather Files'}
               </button>
             </div>
+
+            {validationSuccess && files.length > 0 && (
+              <button
+                onClick={() => setShowChat(true)}
+                className="w-full px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition flex items-center justify-center gap-2"
+              >
+                <span>💬</span>
+                <span>Chat with Codebase</span>
+              </button>
+            )}
           </div>
 
           {error && (
@@ -206,6 +218,14 @@ export default function Home() {
             file={selectedFile}
             onSave={handleSaveFile}
             onClose={() => setSelectedFile(null)}
+          />
+        )}
+
+        {showChat && (
+          <ChatInterface
+            repositoryUrl={githubUrl}
+            files={files}
+            onClose={() => setShowChat(false)}
           />
         )}
       </main>
