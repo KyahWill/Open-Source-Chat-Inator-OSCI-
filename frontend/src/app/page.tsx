@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import TextEditor from '@/components/TextEditor';
 
 export default function Home() {
   const [githubUrl, setGithubUrl] = useState('');
@@ -10,6 +11,7 @@ export default function Home() {
   const [validationSuccess, setValidationSuccess] = useState(false);
   const [files, setFiles] = useState<any[]>([]);
   const [error, setError] = useState('');
+  const [selectedFile, setSelectedFile] = useState<any | null>(null);
 
   const validateGithubUrl = (url: string): boolean => {
     const githubPattern = /^https?:\/\/(www\.)?github\.com\/[\w-]+\/[\w.-]+\/?$/;
@@ -85,6 +87,18 @@ export default function Home() {
     } finally {
       setIsGathering(false);
     }
+  };
+
+  const handleFileClick = (file: any) => {
+    setSelectedFile({
+      path: file.path || file.name,
+      content: file.content || ''
+    });
+  };
+
+  const handleSaveFile = async (content: string) => {
+    // Implement save logic here if needed
+    console.log('Saving file:', selectedFile?.path, content);
   };
 
   return (
@@ -165,7 +179,8 @@ export default function Home() {
                   {files.map((file, index) => (
                     <li
                       key={index}
-                      className="flex items-center gap-3 p-3 bg-white dark:bg-zinc-800 rounded-lg hover:shadow-md transition"
+                      onClick={() => handleFileClick(file)}
+                      className="flex items-center gap-3 p-3 bg-white dark:bg-zinc-800 rounded-lg hover:shadow-md transition cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-700"
                     >
                       <span className="text-zinc-400">📄</span>
                       <div className="flex-1">
@@ -185,6 +200,14 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        {selectedFile && (
+          <TextEditor
+            file={selectedFile}
+            onSave={handleSaveFile}
+            onClose={() => setSelectedFile(null)}
+          />
+        )}
       </main>
     </div>
   );
