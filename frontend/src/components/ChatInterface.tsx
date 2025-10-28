@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { ensureSession, getSessionId } from '@/utils/sessionManager';
+import { ensureSession } from '@/utils/sessionManager';
+import MarkdownRenderer from './MarkdownRenderer';
 
 interface Message {
   id: string;
@@ -210,7 +211,13 @@ export default function ChatInterface({ repositoryUrl, files, onClose }: ChatInt
                     : 'bg-zinc-100 dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100'
                 }`}
               >
-                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                {message.role === 'user' ? (
+                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                ) : (
+                  <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
+                    <MarkdownRenderer content={message.content} />
+                  </div>
+                )}
                 <p className={`text-xs mt-2 ${
                   message.role === 'user' ? 'text-blue-200' : 'text-zinc-500 dark:text-zinc-400'
                 }`}>

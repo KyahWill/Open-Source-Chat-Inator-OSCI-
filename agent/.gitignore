@@ -10,7 +10,7 @@ wheels/
 .venv
 
 ## SQLITE Database 
-.sessions.db
+sessions.db
 
 ## Environment Variables
 **/.env

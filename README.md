@@ -3,6 +3,14 @@
 ## Goals
 This chatbot allows users to ask questions about open source code and get answers from the Gemini API.
 
+## Features
+- 🔍 GitHub repository analysis
+- 💬 Interactive chat with AI agent
+- 📝 Full markdown support in responses
+- 🎨 Syntax highlighting for code blocks
+- 🔄 Automatic session management
+- 🌓 Dark/Light mode support
+
 ## Architecture
 - **Frontend**: Next.js application (port 3000)
 - **Backend**: Flask API (port 5000) - handles GitHub repo fetching and proxies chat requests
@@ -78,4 +86,32 @@ The application implements automatic session management following the ADK API pa
 - **Conversation persistence**: Agent remembers context across messages
 - **Error recovery**: Automatically creates session if missing
 - **Visual feedback**: Connection status displayed in chat UI
+
+## Markdown Support
+
+The chat interface supports full markdown rendering for rich, formatted responses. See [MARKDOWN_SUPPORT.md](docs/MARKDOWN_SUPPORT.md) for details.
+
+**Supported features:**
+- Syntax-highlighted code blocks (100+ languages)
+- Tables with responsive scrolling
+- Lists (ordered, unordered, nested)
+- Headings, bold, italic, links
+- Blockquotes and horizontal rules
+- GitHub Flavored Markdown (GFM)
+
+**Example:**
+```markdown
+## Code Example
+
+```python
+def hello():
+    print("Hello, World!")
+```
+
+| Feature | Status |
+|---------|--------|
+| Markdown | ✅ |
+```
+
+This renders with proper syntax highlighting, formatted tables, and styled text.
 
