@@ -9,4 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
+## SQLITE Database 
+.sessions.db
+
+## Environment Variables
 **/.env

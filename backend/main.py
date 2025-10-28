@@ -8,6 +8,7 @@ import base64
 import os
 import asyncio
 import aiohttp
+import requests
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -18,6 +19,7 @@ CORS(app)
 
 # GitHub token from environment variable
 GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
+AGENT_SERVICE_URL = os.environ.get('AGENT_SERVICE_URL', 'http://localhost:8080')
 
 def validate_github_url(url):
     """Validate if the URL is a valid GitHub URL"""
@@ -247,6 +249,106 @@ def gather_files():
         'total_files': result.get('total_files', len(files_array))
     }), 200
 
+@app.route('/check-session', methods=['POST'])
+def check_session():
+    """POST endpoint to check if a session exists"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({
+            'error': 'Missing request body'
+        }), 400
+    
+    user_id = data.get('user_id', 'default_user')
+    session_id = data.get('session_id')
+    
+    if not session_id:
+        return jsonify({
+            'error': 'Missing session_id'
+        }), 400
+    
+    try:
+        # Check if session exists by trying to get it
+        session_url = f"{AGENT_SERVICE_URL}/apps/root_agent/users/{user_id}/sessions/{session_id}"
+        
+        session_response = requests.get(
+            session_url,
+            timeout=10
+        )
+        
+        if session_response.status_code == 200:
+            return jsonify({
+                'exists': True,
+                'session_id': session_id
+            }), 200
+        else:
+            return jsonify({
+                'exists': False,
+                'session_id': session_id
+            }), 404
+        
+    except requests.exceptions.ConnectionError:
+        return jsonify({
+            'error': 'Could not connect to agent service. Make sure it is running on port 8080.'
+        }), 503
+    except Exception as e:
+        return jsonify({
+            'error': f'Error checking session: {str(e)}'
+        }), 500
+
+@app.route('/create-session', methods=['POST'])
+def create_session():
+    """POST endpoint to create a new agent session"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({
+            'error': 'Missing request body'
+        }), 400
+    
+    repository = data.get('repository', '')
+    user_id = data.get('user_id', 'default_user')
+    session_id = data.get('session_id', f'session_{repository.replace("/", "_")}')
+    
+    try:
+        # Create session with initial state containing repository info
+        session_url = f"{AGENT_SERVICE_URL}/apps/root_agent/users/{user_id}/sessions/{session_id}"
+        session_payload = {
+            "state": {
+                "repository": repository,
+                "initialized": True
+            }
+        }
+        
+        session_response = requests.post(
+            session_url,
+            json=session_payload,
+            timeout=10
+        )
+        
+        if session_response.status_code == 200:
+            session_data = session_response.json()
+            return jsonify({
+                'session_id': session_data.get('id', session_id),
+                'user_id': user_id,
+                'repository': repository,
+                'message': 'Session created successfully'
+            }), 200
+        else:
+            return jsonify({
+                'error': f'Failed to create session: {session_response.status_code}',
+                'details': session_response.text
+            }), 500
+        
+    except requests.exceptions.ConnectionError:
+        return jsonify({
+            'error': 'Could not connect to agent service. Make sure it is running on port 8080.'
+        }), 503
+    except Exception as e:
+        return jsonify({
+            'error': f'Error creating session: {str(e)}'
+        }), 500
+
 @app.route('/chat', methods=['POST'])
 def chat():
     """POST endpoint to chat with the codebase using the agent"""
@@ -260,28 +362,97 @@ def chat():
     message = data['message']
     repository = data.get('repository', '')
     files = data.get('files', [])
+    user_id = data.get('user_id', 'default_user')
+    session_id = data.get('session_id')
     
-    # TODO: Integrate with your agent service
-    # For now, return a placeholder response
-    # You'll need to call your agent API at http://localhost:8080
+    # If no session_id provided, create one based on repository
+    if not session_id:
+        session_id = f'session_{repository.replace("/", "_")}' if repository else 'default_session'
+        
+        # Try to create the session first
+        try:
+            session_url = f"{AGENT_SERVICE_URL}/apps/root_agent/users/{user_id}/sessions/{session_id}"
+            session_payload = {
+                "state": {
+                    "repository": repository,
+                    "initialized": True
+                }
+            }
+            requests.post(session_url, json=session_payload, timeout=10)
+        except:
+            pass  # Session might already exist, continue anyway
     
     try:
-        # Example: Forward to agent service
-        # agent_response = requests.post(
-        #     'http://localhost:8080/api/agent/chat',
-        #     json={'message': message, 'context': {'repository': repository, 'files': files}}
-        # )
-        # return jsonify({'response': agent_response.json()['response']}), 200
+        # Build context from repository and files
+        context = f"Repository: {repository}\n\n"
+        if files:
+            context += f"Analyzing {len(files)} files from the codebase.\n\n"
+            # Include file paths and snippets for context
+            for file_info in files[:10]:  # Limit to first 10 files to avoid token limits
+                path = file_info.get('path', '')
+                content = file_info.get('content', '')
+                context += f"File: {path}\n"
+                # Include first 500 chars of each file as context
+                if content and len(content) > 500:
+                    context += f"{content[:500]}...\n\n"
+                elif content:
+                    context += f"{content}\n\n"
         
-        # Placeholder response
-        response_text = f"I received your question: '{message}'. I'm analyzing the codebase from {repository} with {len(files)} files. This is a placeholder response - integrate with your agent service for actual AI responses."
+        # Combine context with user message
+        full_message = f"{context}\nUser Question: {message}"
         
+        # Call the agent service using the correct ADK endpoint with the session
+        agent_url = f"{AGENT_SERVICE_URL}/run"
+        agent_payload = {
+            "app_name": "root_agent",
+            "user_id": user_id,
+            "session_id": session_id,
+            "new_message": {
+                "role": "user",
+                "parts": [{"text": full_message}]
+            }
+        }
+        
+        agent_response = requests.post(
+            agent_url,
+            json=agent_payload,
+            timeout=30
+        )
+        
+        if agent_response.status_code == 200:
+            events = agent_response.json()
+            # Extract the agent's text response from the events
+            response_text = ""
+            for event in events:
+                if 'content' in event and 'parts' in event['content']:
+                    for part in event['content']['parts']:
+                        if 'text' in part:
+                            response_text += part['text']
+            
+            if not response_text:
+                response_text = "No response from agent"
+            
+            return jsonify({
+                'response': response_text,
+                'repository': repository,
+                'files_count': len(files),
+                'session_id': session_id,
+                'user_id': user_id
+            }), 200
+        else:
+            return jsonify({
+                'error': f'Agent service returned status {agent_response.status_code}',
+                'details': agent_response.text
+            }), 500
+        
+    except requests.exceptions.ConnectionError:
         return jsonify({
-            'response': response_text,
-            'repository': repository,
-            'files_count': len(files)
-        }), 200
-        
+            'error': 'Could not connect to agent service. Make sure it is running on port 8080.'
+        }), 503
+    except requests.exceptions.Timeout:
+        return jsonify({
+            'error': 'Agent service request timed out'
+        }), 504
     except Exception as e:
         return jsonify({
             'error': f'Error processing chat request: {str(e)}'

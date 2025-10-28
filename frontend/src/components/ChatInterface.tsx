@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { ensureSession, getSessionId } from '@/utils/sessionManager';
 
 interface Message {
   id: string;
@@ -26,7 +27,10 @@ export default function ChatInterface({ repositoryUrl, files, onClose }: ChatInt
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const sessionInitialized = useRef(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -36,8 +40,64 @@ export default function ChatInterface({ repositoryUrl, files, onClose }: ChatInt
     scrollToBottom();
   }, [messages]);
 
+  // Initialize session when component mounts
+  useEffect(() => {
+    const initializeSession = async () => {
+      if (sessionInitialized.current) return;
+      sessionInitialized.current = true;
+
+      try {
+        const repoName = repositoryUrl.replace(/^https?:\/\/(www\.)?github\.com\//, '');
+        const session = await ensureSession(repoName);
+        
+        if (session) {
+          setSessionId(session.session_id);
+          console.log('Session initialized:', session.session_id);
+        } else {
+          setSessionError('Failed to initialize session with agent');
+          const errorMsg: Message = {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: '⚠️ Warning: Could not establish a session with the agent. Some features may not work correctly.',
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, errorMsg]);
+        }
+      } catch (error) {
+        console.error('Error initializing session:', error);
+        setSessionError('Session initialization error');
+      }
+    };
+
+    initializeSession();
+  }, [repositoryUrl]);
+
   const handleSendMessage = async () => {
     if (!input.trim() || isLoading) return;
+
+    // Ensure we have a session before sending message
+    let currentSessionId = sessionId;
+    if (!currentSessionId) {
+      try {
+        const repoName = repositoryUrl.replace(/^https?:\/\/(www\.)?github\.com\//, '');
+        const session = await ensureSession(repoName);
+        if (session) {
+          currentSessionId = session.session_id;
+          setSessionId(currentSessionId);
+        } else {
+          throw new Error('Failed to create session');
+        }
+      } catch (error) {
+        const errorMessage: Message = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: '❌ Could not establish a session with the agent. Please try again.',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, errorMessage]);
+        return;
+      }
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -51,6 +111,8 @@ export default function ChatInterface({ repositoryUrl, files, onClose }: ChatInt
     setIsLoading(true);
 
     try {
+      const repoName = repositoryUrl.replace(/^https?:\/\/(www\.)?github\.com\//, '');
+      
       const response = await fetch('http://localhost:5000/chat', {
         method: 'POST',
         headers: {
@@ -58,8 +120,10 @@ export default function ChatInterface({ repositoryUrl, files, onClose }: ChatInt
         },
         body: JSON.stringify({
           message: input.trim(),
-          repository: repositoryUrl,
-          files: files.map(f => ({ path: f.path, content: f.content }))
+          repository: repoName,
+          files: files.map(f => ({ path: f.path, content: f.content })),
+          session_id: currentSessionId,
+          user_id: 'default_user'
         }),
       });
 
@@ -86,7 +150,7 @@ export default function ChatInterface({ repositoryUrl, files, onClose }: ChatInt
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -101,9 +165,21 @@ export default function ChatInterface({ repositoryUrl, files, onClose }: ChatInt
           <div className="flex items-center gap-3">
             <span className="text-2xl">💬</span>
             <div>
-              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-                Codebase Chat
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                  Codebase Chat
+                </h2>
+                {sessionId && (
+                  <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs rounded-full">
+                    ✓ Connected
+                  </span>
+                )}
+                {sessionError && (
+                  <span className="px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-xs rounded-full">
+                    ⚠ Session Error
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 Ask questions about {repositoryUrl.split('/').slice(-2).join('/')}
               </p>
@@ -163,7 +239,7 @@ export default function ChatInterface({ repositoryUrl, files, onClose }: ChatInt
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
+              onKeyDown={handleKeyDown}
               placeholder="Ask about the codebase... (Press Enter to send)"
               className="flex-1 px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none"
               rows={2}
