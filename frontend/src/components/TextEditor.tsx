@@ -58,7 +58,7 @@ export default function TextEditor({ file, onSave, onClose }: TextEditorProps) {
           </div>
           
           <div className="flex items-center gap-2">
-            {onSave && (
+            { /*onSave && (
               <button
                 onClick={handleSave}
                 disabled={!hasChanges || isSaving}
@@ -66,7 +66,7 @@ export default function TextEditor({ file, onSave, onClose }: TextEditorProps) {
               >
                 {isSaving ? 'Saving...' : 'Save'}
               </button>
-            )}
+            ) */}
             {onClose && (
               <button
                 onClick={onClose}
