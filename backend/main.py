@@ -6,6 +6,8 @@ import urllib.error
 import json
 import base64
 import os
+import asyncio
+import aiohttp
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -35,9 +37,33 @@ def check_url_exists(url):
     except Exception as e:
         return False
 
-def get_source_code(github_url, token=None):
+async def fetch_file_content(session, owner, repo, file_path, auth_token):
+    """Fetch a single file's content asynchronously"""
+    file_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_path}"
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+    if auth_token:
+        headers['Authorization'] = f'token {auth_token}'
+    
+    try:
+        async with session.get(file_url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as response:
+            file_data = await response.json()
+            
+            # Decode base64 content
+            if 'content' in file_data:
+                content = base64.b64decode(file_data['content']).decode('utf-8', errors='ignore')
+                return file_path, content
+            return file_path, 'No content available'
+    
+    except Exception as e:
+        return file_path, f'Error fetching file: {str(e)}'
+
+async def get_source_code_async(github_url, token=None):
     """
-    Fetch all source code from a GitHub repository
+    Fetch all source code from a GitHub repository asynchronously
     
     Args:
         github_url: GitHub repository URL (e.g., https://github.com/owner/repo)
@@ -59,9 +85,6 @@ def get_source_code(github_url, token=None):
     # Use provided token or fall back to environment variable
     auth_token = token or GITHUB_TOKEN
     
-    # GitHub API endpoint
-    api_url = f'https://api.github.com/repos/{owner}/{repo}/git/trees/main?recursive=1'
-    
     # Build headers
     headers = {
         'User-Agent': 'Mozilla/5.0',
@@ -72,103 +95,49 @@ def get_source_code(github_url, token=None):
     if auth_token:
         headers['Authorization'] = f'token {auth_token}'
     
-    try:
-        # Fetch repository tree
-        req = urllib.request.Request(api_url, headers=headers)
-        
-        with urllib.request.urlopen(req, timeout=30) as response:
-            tree_data = json.loads(response.read().decode())
-        
-        if 'tree' not in tree_data:
-            return {'error': 'Unable to fetch repository tree'}
-        
-        files = {}
-        
-        # Fetch content for each file
-        for item in tree_data['tree']:
-            if item['type'] == 'blob':  # It's a file
-                file_path = item['path']
-                file_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_path}"
-                
-                try:
-                    file_headers = {
-                        'User-Agent': 'Mozilla/5.0',
-                        'Accept': 'application/vnd.github.v3+json'
-                    }
-                    if auth_token:
-                        file_headers['Authorization'] = f'token {auth_token}'
-                    
-                    file_req = urllib.request.Request(file_url, headers=file_headers)
-                    
-                    with urllib.request.urlopen(file_req, timeout=10) as file_response:
-                        file_data = json.loads(file_response.read().decode())
-                    
-                    # Decode base64 content
-                    if 'content' in file_data:
-                        content = base64.b64decode(file_data['content']).decode('utf-8', errors='ignore')
-                        files[file_path] = content
-                
-                except Exception as e:
-                    files[file_path] = f'Error fetching file: {str(e)}'
-        
-        return {
-            'repository': f'{owner}/{repo}',
-            'files': files,
-            'total_files': len(files)
-        }
-    
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            # Try 'master' branch if 'main' doesn't exist
-            api_url = f'https://api.github.com/repos/{owner}/{repo}/git/trees/master?recursive=1'
+    async with aiohttp.ClientSession() as session:
+        # Try main branch first
+        for branch in ['main', 'master']:
+            api_url = f'https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1'
+            
             try:
-                req = urllib.request.Request(api_url, headers=headers)
-                
-                with urllib.request.urlopen(req, timeout=30) as response:
-                    tree_data = json.loads(response.read().decode())
-                
-                if 'tree' not in tree_data:
-                    return {'error': 'Unable to fetch repository tree'}
-                
-                files = {}
-                
-                for item in tree_data['tree']:
-                    if item['type'] == 'blob':
-                        file_path = item['path']
-                        file_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_path}"
-                        
-                        try:
-                            file_headers = {
-                                'User-Agent': 'Mozilla/5.0',
-                                'Accept': 'application/vnd.github.v3+json'
-                            }
-                            if auth_token:
-                                file_headers['Authorization'] = f'token {auth_token}'
-                            
-                            file_req = urllib.request.Request(file_url, headers=file_headers)
-                            
-                            with urllib.request.urlopen(file_req, timeout=10) as file_response:
-                                file_data = json.loads(file_response.read().decode())
-                            
-                            if 'content' in file_data:
-                                content = base64.b64decode(file_data['content']).decode('utf-8', errors='ignore')
-                                files[file_path] = content
-                        
-                        except Exception as e:
-                            files[file_path] = f'Error fetching file: {str(e)}'
-                
-                return {
-                    'repository': f'{owner}/{repo}',
-                    'files': files,
-                    'total_files': len(files)
-                }
+                async with session.get(api_url, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                    if response.status != 200:
+                        continue
+                    
+                    tree_data = await response.json()
+                    
+                    if 'tree' not in tree_data:
+                        continue
+                    
+                    # Get all file paths
+                    file_items = [item for item in tree_data['tree'] if item['type'] == 'blob']
+                    
+                    # Fetch all files concurrently
+                    tasks = [
+                        fetch_file_content(session, owner, repo, item['path'], auth_token)
+                        for item in file_items
+                    ]
+                    
+                    results = await asyncio.gather(*tasks)
+                    files = dict(results)
+                    
+                    return {
+                        'repository': f'{owner}/{repo}',
+                        'files': files,
+                        'total_files': len(files)
+                    }
+            
             except Exception as e:
-                return {'error': f'Repository not found or inaccessible: {str(e)}'}
-        else:
-            return {'error': f'HTTP Error {e.code}: {str(e)}'}
-    
-    except Exception as e:
-        return {'error': f'Error fetching source code: {str(e)}'}
+                if branch == 'master':  # Last attempt failed
+                    return {'error': f'Error fetching source code: {str(e)}'}
+                continue
+        
+        return {'error': 'Repository not found or inaccessible'}
+
+def get_source_code(github_url, token=None):
+    """Synchronous wrapper for async get_source_code_async"""
+    return asyncio.run(get_source_code_async(github_url, token))
 
 @app.route('/source-code', methods=['GET'])
 def fetch_source_code():
