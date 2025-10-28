@@ -39,7 +39,7 @@ export default function Home() {
     setIsValidating(true);
 
     try {
-      const response = await fetch('http://localhost:5000/validate-github-url', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BACKEND_URL}/validate-github-url`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -68,7 +68,7 @@ export default function Home() {
     setIsGathering(true);
 
     try {
-      const response = await fetch('http://localhost:5000/gather-files', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BACKEND_URL}/gather-files`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
